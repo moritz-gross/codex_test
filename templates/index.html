@@ -332,11 +332,6 @@ B -> b</textarea>
                 return; // Empty cell, nothing to show
             }
 
-            // If this is a terminal cell (i === j), no derivation to show
-            if (i === j) {
-                return;
-            }
-
             // Highlight the clicked cell
             const clickedCell = document.querySelector(`td[data-i="${i}"][data-j="${j}"]`);
             if (clickedCell) {
@@ -349,19 +344,30 @@ B -> b</textarea>
                 const derivation = derivationsData[key];
 
                 if (derivation) {
-                    const [leftI, leftJ] = derivation.left_cell;
-                    const [rightI, rightJ] = derivation.right_cell;
+                    // Check if this is a terminal derivation
+                    if (derivation.terminal !== undefined) {
+                        // Terminal derivation: show arrow from input token row
+                        const inputRow = document.querySelector(`tr:last-child td.token.input-char:nth-child(${i + 2})`);
+                        if (inputRow) {
+                            inputRow.classList.add('source');
+                        }
+                        drawArrowFromInputToken(i, j);
+                    } else {
+                        // Non-terminal derivation: show arrows from two source cells
+                        const [leftI, leftJ] = derivation.left_cell;
+                        const [rightI, rightJ] = derivation.right_cell;
 
-                    // Highlight source cells
-                    const leftCell = document.querySelector(`td[data-i="${leftI}"][data-j="${leftJ}"]`);
-                    const rightCell = document.querySelector(`td[data-i="${rightI}"][data-j="${rightJ}"]`);
+                        // Highlight source cells
+                        const leftCell = document.querySelector(`td[data-i="${leftI}"][data-j="${leftJ}"]`);
+                        const rightCell = document.querySelector(`td[data-i="${rightI}"][data-j="${rightJ}"]`);
 
-                    if (leftCell) leftCell.classList.add('source');
-                    if (rightCell) rightCell.classList.add('source');
+                        if (leftCell) leftCell.classList.add('source');
+                        if (rightCell) rightCell.classList.add('source');
 
-                    // Draw arrows
-                    drawArrow(leftI, leftJ, i, j);
-                    drawArrow(rightI, rightJ, i, j);
+                        // Draw arrows
+                        drawArrow(leftI, leftJ, i, j);
+                        drawArrow(rightI, rightJ, i, j);
+                    }
                 }
             }
         }
@@ -413,7 +419,50 @@ B -> b</textarea>
             line.setAttribute('stroke-width', '3');
             line.setAttribute('marker-end', 'url(#arrowhead)');
 
-            // Create arrowhead marker if it doesn't exist
+            ensureArrowheadMarker();
+            svg.appendChild(line);
+        }
+
+        function drawArrowFromInputToken(position, toJ) {
+            const inputCell = document.querySelector(`tr:last-child td.token.input-char:nth-child(${position + 2})`);
+            const toCell = document.querySelector(`td[data-i="${position}"][data-j="${toJ}"]`);
+
+            if (!inputCell || !toCell) return;
+
+            const svg = document.getElementById('arrow-overlay');
+            const wrapper = document.getElementById('table-wrapper');
+
+            // Update SVG size to match wrapper
+            const wrapperRect = wrapper.getBoundingClientRect();
+            svg.setAttribute('width', wrapperRect.width);
+            svg.setAttribute('height', wrapperRect.height);
+
+            // Get cell positions relative to wrapper
+            const fromRect = inputCell.getBoundingClientRect();
+            const toRect = toCell.getBoundingClientRect();
+            const wrapperOffset = wrapperRect;
+
+            const fromX = fromRect.left + fromRect.width / 2 - wrapperOffset.left;
+            const fromY = fromRect.top + fromRect.height / 2 - wrapperOffset.top;
+            const toX = toRect.left + toRect.width / 2 - wrapperOffset.left;
+            const toY = toRect.top + toRect.height / 2 - wrapperOffset.top;
+
+            // Create arrow line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', fromX);
+            line.setAttribute('y1', fromY);
+            line.setAttribute('x2', toX);
+            line.setAttribute('y2', toY);
+            line.setAttribute('stroke', '#f57c00');
+            line.setAttribute('stroke-width', '3');
+            line.setAttribute('marker-end', 'url(#arrowhead)');
+
+            ensureArrowheadMarker();
+            svg.appendChild(line);
+        }
+
+        function ensureArrowheadMarker() {
+            const svg = document.getElementById('arrow-overlay');
             if (!svg.querySelector('#arrowhead')) {
                 const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
                 const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
@@ -432,8 +481,6 @@ B -> b</textarea>
                 defs.appendChild(marker);
                 svg.appendChild(defs);
             }
-
-            svg.appendChild(line);
         }
 
         // Parse on load with default values

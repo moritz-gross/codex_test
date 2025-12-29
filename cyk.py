@@ -57,7 +57,14 @@ def cyk_table(
     derivations: dict[tuple[int, int, str], dict] = {}
 
     for i, token in enumerate(tokens):
-        table[i][i].update(term_map.get(token, set()))
+        nonterminals = term_map.get(token, set())
+        for nt in nonterminals:
+            # Store terminal derivations: nonterminal came from this token
+            derivations[(i, i, nt)] = {
+                'terminal': token,
+                'position': i
+            }
+        table[i][i].update(nonterminals)
 
     for span in range(2, n + 1):
         for i in range(n - span + 1):
