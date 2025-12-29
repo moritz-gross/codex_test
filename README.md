@@ -12,4 +12,9 @@ The **CYK (Cocke-Younger-Kasami) algorithm** is a dynamic programming algorithm 
 
 ## Showcase
 
-![app_screenshot](assets/app_screenshot.png)
+This web-based visualization tool displays the CYK parsing table and lets you interactively explore how each nonterminal is derived. 
+Click any cell to see arrows pointing from its source cells, visually tracing the derivation path from input tokens up through the parse tree. 
+The color-coded highlighting shows the clicked cell in yellow and its source cells in green, making it easy to understand the bottom-up construction of the parse.
+
+![](assets/app_screenshot__accepted.png)
+![](assets/app_screenshot__rejected.png)
