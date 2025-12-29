@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYK Parser Visualization</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        .input-section {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .output-section {
+            flex: 2;
+            min-width: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-align: center;
+        }
+        .result.accepted {
+            background: #d4edda;
+            color: #155724;
+        }
+        .result.rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+        }
+        td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: center;
+            min-width: 60px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        td.empty {
+            background: #f9f9f9;
+            border-color: #eee;
+        }
+        td.cell {
+            background: #fff;
+        }
+        td.cell.has-content {
+            background: #e3f2fd;
+        }
+        td.cell.top-right {
+            border: 3px solid #28a745;
+        }
+        td.cell.top-right.rejected {
+            border-color: #dc3545;
+        }
+        td.token {
+            background: #fff3cd;
+            font-weight: 600;
+        }
+        .help {
+            font-size: 12px;
+            color: #666;
+            margin-top: -10px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>CYK Parser Visualization</h1>
+
+    <div class="container">
+        <div class="input-section">
+            <label for="input">Input String</label>
+            <input type="text" id="input" placeholder="e.g., baaba" value="baaba">
+
+            <label for="grammar">Grammar (CNF)</label>
+            <textarea id="grammar" placeholder="S -> A B | a">S -> A B | B C
+A -> B A | a
+B -> C C | b
+C -> A B | a</textarea>
+            <p class="help">Format: "S -> A B | a" (binary rules or terminals, one non-terminal per line)</p>
+
+            <label for="start">Start Symbol</label>
+            <input type="text" id="start" value="S">
+
+            <button onclick="parse()">Parse</button>
+        </div>
+
+        <div class="output-section">
+            <div id="result"></div>
+            <div id="error"></div>
+            <div class="table-container">
+                <div id="table"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function parse() {
+            const input = document.getElementById('input').value;
+            const grammar = document.getElementById('grammar').value;
+            const startSymbol = document.getElementById('start').value;
+
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('error').innerHTML = '';
+            document.getElementById('table').innerHTML = '';
+
+            try {
+                const response = await fetch('/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        input: input,
+                        grammar: grammar,
+                        start_symbol: startSymbol
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    document.getElementById('error').innerHTML =
+                        `<div class="error">${data.error}</div>`;
+                    return;
+                }
+
+                // Show result
+                const resultDiv = document.getElementById('result');
+                if (data.accepted) {
+                    resultDiv.innerHTML = '<div class="result accepted">Accepted</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="result rejected">Rejected</div>';
+                }
+
+                // Build table
+                renderTable(data.tokens, data.table, data.accepted);
+            } catch (e) {
+                document.getElementById('error').innerHTML =
+                    `<div class="error">Error: ${e.message}</div>`;
+            }
+        }
+
+        function renderTable(tokens, table, accepted) {
+            const n = tokens.length;
+            if (n === 0) {
+                document.getElementById('table').innerHTML =
+                    '<p>Empty input - no table to display</p>';
+                return;
+            }
+
+            let html = '<table>';
+
+            // Header row with tokens
+            html += '<tr><td class="empty"></td>';
+            for (let j = 0; j < n; j++) {
+                html += `<td class="token">${escapeHtml(tokens[j])}</td>`;
+            }
+            html += '</tr>';
+
+            // Table rows (CYK table is upper-triangular)
+            for (let i = 0; i < n; i++) {
+                html += '<tr>';
+                html += `<td class="token">${i + 1}</td>`;
+
+                for (let j = 0; j < n; j++) {
+                    if (j < i) {
+                        // Below diagonal - empty
+                        html += '<td class="empty"></td>';
+                    } else {
+                        // On or above diagonal - show cell
+                        const cell = table[i][j];
+                        const content = cell.length > 0 ? cell.join(', ') : '';
+                        const hasContent = cell.length > 0 ? 'has-content' : '';
+
+                        // Top-right cell (full span)
+                        let topRight = '';
+                        if (i === 0 && j === n - 1) {
+                            topRight = accepted ? 'top-right' : 'top-right rejected';
+                        }
+
+                        html += `<td class="cell ${hasContent} ${topRight}">${escapeHtml(content)}</td>`;
+                    }
+                }
+                html += '</tr>';
+            }
+
+            html += '</table>';
+            document.getElementById('table').innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Parse on load with default values
+        window.onload = parse;
+    </script>
+</body>
+</html>
