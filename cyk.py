@@ -34,22 +34,27 @@ def cyk_table(
     input_data: Iterable[str] | str,
     grammar: dict[str, list[tuple[str, str] | str]],
     start_symbol: str = "S",
-) -> tuple[list[str], list[list[set[str]]], bool]:
+) -> tuple[list[str], list[list[set[str]]], bool, dict]:
     """
-    Return (tokens, table, accepted) for the CYK algorithm.
+    Return (tokens, table, accepted, derivations) for the CYK algorithm.
 
     input_data can be an iterable of tokens or a string (treated as characters).
     Grammar format: {NonTerminal: [("A", "B"), "a", ...]}.
     Use "" for an epsilon production (only supported for empty input).
+
+    derivations is a dict mapping (i, j, nonterminal) to its source:
+        {(i, j, 'A'): {'left_cell': (i, k), 'right_cell': (k+1, j),
+                       'left_symbol': 'B', 'right_symbol': 'C'}}
     """
     tokens = list(input_data) if not isinstance(input_data, str) else list(input_data)
     term_map, pair_map, epsilon_set = _build_maps(grammar)
 
     n = len(tokens)
     if n == 0:
-        return tokens, [], start_symbol in epsilon_set
+        return tokens, [], start_symbol in epsilon_set, {}
 
     table: list[list[set[str]]] = [[set() for _ in range(n)] for _ in range(n)]
+    derivations: dict[tuple[int, int, str], dict] = {}
 
     for i, token in enumerate(tokens):
         table[i][i].update(term_map.get(token, set()))
@@ -63,9 +68,19 @@ def cyk_table(
                 right = table[k + 1][j]
                 for b in left:
                     for c in right:
-                        cell.update(pair_map.get((b, c), set()))
+                        new_nonterminals = pair_map.get((b, c), set())
+                        for nt in new_nonterminals:
+                            # Only store the first derivation found for each nonterminal
+                            if nt not in cell:
+                                derivations[(i, j, nt)] = {
+                                    'left_cell': (i, k),
+                                    'right_cell': (k + 1, j),
+                                    'left_symbol': b,
+                                    'right_symbol': c
+                                }
+                        cell.update(new_nonterminals)
 
-    return tokens, table, start_symbol in table[0][n - 1]
+    return tokens, table, start_symbol in table[0][n - 1], derivations
 
 
 def cyk_accepts(
@@ -80,5 +95,5 @@ def cyk_accepts(
     Grammar format: {NonTerminal: [("A", "B"), "a", ...]}.
     Use "" for an epsilon production (only supported for empty input).
     """
-    _, _, accepted = cyk_table(input_data, grammar, start_symbol)
+    _, _, accepted, _ = cyk_table(input_data, grammar, start_symbol)
     return accepted

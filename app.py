@@ -53,19 +53,27 @@ def parse():
 
     try:
         grammar = parse_grammar(grammar_text)
-        tokens, table, accepted = cyk_table(input_str, grammar, start_symbol)
+        tokens, table, accepted, derivations = cyk_table(input_str, grammar, start_symbol)
 
         # Convert sets to lists for JSON serialization
         table_data = [[list(cell) for cell in row] for row in table]
+
+        # Convert derivations dict with tuple keys to JSON-serializable format
+        # Key format: "i,j,nonterminal" -> value
+        derivations_data = {
+            f"{i},{j},{nt}": deriv_info
+            for (i, j, nt), deriv_info in derivations.items()
+        }
 
         return jsonify({
             "tokens": tokens,
             "table": table_data,
             "accepted": accepted,
+            "derivations": derivations_data,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

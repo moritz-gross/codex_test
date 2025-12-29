@@ -1,0 +1,1 @@
+- use uv for project management, e.g. `uv run app.py`

@@ -138,6 +138,30 @@
             margin-top: -10px;
             margin-bottom: 15px;
         }
+        .table-wrapper {
+            position: relative;
+        }
+        td.cell {
+            cursor: pointer;
+        }
+        td.cell:hover {
+            background: #bbdefb !important;
+        }
+        td.highlighted {
+            background: #ffeb3b !important;
+            border: 2px solid #fbc02d !important;
+        }
+        td.source {
+            background: #c8e6c9 !important;
+            border: 2px solid #66bb6a !important;
+        }
+        #arrow-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -166,12 +190,20 @@ B -> b</textarea>
             <div id="result"></div>
             <div id="error"></div>
             <div class="table-container">
-                <div id="table"></div>
+                <div class="table-wrapper" id="table-wrapper">
+                    <svg id="arrow-overlay"></svg>
+                    <div id="table"></div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
+        // Global storage for derivations data
+        let derivationsData = {};
+        let tokensData = [];
+        let tableData = [];
+
         async function parse() {
             const input = document.getElementById('input').value;
             const grammar = document.getElementById('grammar').value;
@@ -180,6 +212,7 @@ B -> b</textarea>
             document.getElementById('result').innerHTML = '';
             document.getElementById('error').innerHTML = '';
             document.getElementById('table').innerHTML = '';
+            clearArrows();
 
             try {
                 const response = await fetch('/parse', {
@@ -199,6 +232,11 @@ B -> b</textarea>
                         `<div class="error">${data.error}</div>`;
                     return;
                 }
+
+                // Store data globally
+                tokensData = data.tokens;
+                tableData = data.table;
+                derivationsData = data.derivations;
 
                 // Show result
                 const resultDiv = document.getElementById('result');
@@ -255,7 +293,7 @@ B -> b</textarea>
                         topRight = accepted ? 'top-right' : 'top-right rejected';
                     }
 
-                    html += `<td class="cell ${hasContent} ${topRight}">${escapeHtml(content)}</td>`;
+                    html += `<td class="cell ${hasContent} ${topRight}" data-i="${i}" data-j="${j}" onclick="onCellClick(${i}, ${j})">${escapeHtml(content)}</td>`;
                 }
 
                 // Fill remaining cells with empty
@@ -282,6 +320,120 @@ B -> b</textarea>
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function onCellClick(i, j) {
+            // Clear previous highlights and arrows
+            clearHighlights();
+            clearArrows();
+
+            const cell = tableData[i][j];
+            if (cell.length === 0) {
+                return; // Empty cell, nothing to show
+            }
+
+            // If this is a terminal cell (i === j), no derivation to show
+            if (i === j) {
+                return;
+            }
+
+            // Highlight the clicked cell
+            const clickedCell = document.querySelector(`td[data-i="${i}"][data-j="${j}"]`);
+            if (clickedCell) {
+                clickedCell.classList.add('highlighted');
+            }
+
+            // Draw arrows for each nonterminal in the cell
+            for (const nonterminal of cell) {
+                const key = `${i},${j},${nonterminal}`;
+                const derivation = derivationsData[key];
+
+                if (derivation) {
+                    const [leftI, leftJ] = derivation.left_cell;
+                    const [rightI, rightJ] = derivation.right_cell;
+
+                    // Highlight source cells
+                    const leftCell = document.querySelector(`td[data-i="${leftI}"][data-j="${leftJ}"]`);
+                    const rightCell = document.querySelector(`td[data-i="${rightI}"][data-j="${rightJ}"]`);
+
+                    if (leftCell) leftCell.classList.add('source');
+                    if (rightCell) rightCell.classList.add('source');
+
+                    // Draw arrows
+                    drawArrow(leftI, leftJ, i, j);
+                    drawArrow(rightI, rightJ, i, j);
+                }
+            }
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('td.highlighted, td.source').forEach(cell => {
+                cell.classList.remove('highlighted', 'source');
+            });
+        }
+
+        function clearArrows() {
+            const svg = document.getElementById('arrow-overlay');
+            svg.innerHTML = '';
+            svg.setAttribute('width', '0');
+            svg.setAttribute('height', '0');
+        }
+
+        function drawArrow(fromI, fromJ, toI, toJ) {
+            const fromCell = document.querySelector(`td[data-i="${fromI}"][data-j="${fromJ}"]`);
+            const toCell = document.querySelector(`td[data-i="${toI}"][data-j="${toJ}"]`);
+
+            if (!fromCell || !toCell) return;
+
+            const svg = document.getElementById('arrow-overlay');
+            const wrapper = document.getElementById('table-wrapper');
+
+            // Update SVG size to match wrapper
+            const wrapperRect = wrapper.getBoundingClientRect();
+            svg.setAttribute('width', wrapperRect.width);
+            svg.setAttribute('height', wrapperRect.height);
+
+            // Get cell positions relative to wrapper
+            const fromRect = fromCell.getBoundingClientRect();
+            const toRect = toCell.getBoundingClientRect();
+            const wrapperOffset = wrapperRect;
+
+            const fromX = fromRect.left + fromRect.width / 2 - wrapperOffset.left;
+            const fromY = fromRect.top + fromRect.height / 2 - wrapperOffset.top;
+            const toX = toRect.left + toRect.width / 2 - wrapperOffset.left;
+            const toY = toRect.top + toRect.height / 2 - wrapperOffset.top;
+
+            // Create arrow line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', fromX);
+            line.setAttribute('y1', fromY);
+            line.setAttribute('x2', toX);
+            line.setAttribute('y2', toY);
+            line.setAttribute('stroke', '#f57c00');
+            line.setAttribute('stroke-width', '3');
+            line.setAttribute('marker-end', 'url(#arrowhead)');
+
+            // Create arrowhead marker if it doesn't exist
+            if (!svg.querySelector('#arrowhead')) {
+                const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+                marker.setAttribute('id', 'arrowhead');
+                marker.setAttribute('markerWidth', '10');
+                marker.setAttribute('markerHeight', '10');
+                marker.setAttribute('refX', '9');
+                marker.setAttribute('refY', '3');
+                marker.setAttribute('orient', 'auto');
+
+                const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                polygon.setAttribute('points', '0 0, 10 3, 0 6');
+                polygon.setAttribute('fill', '#f57c00');
+
+                marker.appendChild(polygon);
+                defs.appendChild(marker);
+                svg.appendChild(defs);
+            }
+
+            svg.appendChild(line);
         }
 
         // Parse on load with default values
