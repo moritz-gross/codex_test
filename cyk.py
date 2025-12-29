@@ -16,8 +16,19 @@ def cyk_accepts(
     Grammar format: {NonTerminal: [("A", "B"), "a", ...]}.
     Use "" for an epsilon production (only supported for empty input).
     """
+    # ========================================================================
+    # INPUT VALIDATION AND PREPROCESSING
+    # ========================================================================
+    # Convert input to list of tokens for indexing
     tokens = list(input_data) if not isinstance(input_data, str) else list(input_data)
 
+    # ========================================================================
+    # GRAMMAR PREPROCESSING
+    # ========================================================================
+    # Build lookup tables for efficient grammar rule access during DP:
+    # - term_map: maps terminal symbols to non-terminals that produce them
+    # - pair_map: maps pairs of non-terminals to non-terminals that produce them
+    # - epsilon_set: tracks which non-terminals can derive empty string
     term_map: dict[str, set[str]] = defaultdict(set)
     pair_map: dict[tuple[str, str], set[str]] = defaultdict(set)
     epsilon_set: set[str] = set()
@@ -25,24 +36,45 @@ def cyk_accepts(
     for lhs, productions in grammar.items():
         for prod in productions:
             if isinstance(prod, str):
+                # Terminal production: A -> "a"
                 if prod == "":
                     epsilon_set.add(lhs)
                 else:
                     term_map[prod].add(lhs)
             else:
+                # Non-terminal production: A -> B C (must be binary for CNF)
                 if len(prod) != 2:
                     raise ValueError(f"Non-terminal production must be length 2: {lhs} -> {prod}")
                 pair_map[(prod[0], prod[1])].add(lhs)
 
+    # ========================================================================
+    # HANDLE EMPTY INPUT
+    # ========================================================================
     n = len(tokens)
     if n == 0:
         return start_symbol in epsilon_set
 
+    # ========================================================================
+    # DYNAMIC PROGRAMMING ALGORITHM - SETUP
+    # ========================================================================
+    # Initialize CYK table: table[i][j] contains non-terminals that can derive tokens[i..j]
     table: list[list[set[str]]] = [[set() for _ in range(n)] for _ in range(n)]
 
+    # ========================================================================
+    # DYNAMIC PROGRAMMING ALGORITHM - BASE CASE
+    # ========================================================================
+    # Fill diagonal: single tokens
+    # table[i][i] = {A | A -> tokens[i] is in grammar}
     for i, token in enumerate(tokens):
         table[i][i].update(term_map.get(token, set()))
 
+    # ========================================================================
+    # DYNAMIC PROGRAMMING ALGORITHM - RECURSIVE CASE
+    # ========================================================================
+    # Fill table bottom-up by increasing span length
+    # For each substring tokens[i..j], try all split points k:
+    #   if B in table[i][k] and C in table[k+1][j] and A -> B C exists,
+    #   then add A to table[i][j]
     for span in range(2, n + 1):
         for i in range(n - span + 1):
             j = i + span - 1
@@ -54,4 +86,8 @@ def cyk_accepts(
                     for c in right:
                         cell.update(pair_map.get((b, c), set()))
 
+    # ========================================================================
+    # RESULT EXTRACTION
+    # ========================================================================
+    # Check if start symbol can derive the entire input
     return start_symbol in table[0][n - 1]
